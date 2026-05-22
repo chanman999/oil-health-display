@@ -9,6 +9,7 @@ declare global {
       updateState: (partial: Partial<OilHealthState>) => void
       onStateChanged: (callback: (state: OilHealthState) => void) => () => void
       openOperatorWindow: () => void
+      setTpmInteracting: (interacting: boolean) => void
     }
   }
 }

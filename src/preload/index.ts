@@ -18,6 +18,9 @@ const api = {
 
   openOperatorWindow: (): void =>
     ipcRenderer.send(IPC.OPERATOR_OPEN),
+
+  setTpmInteracting: (interacting: boolean): void =>
+    ipcRenderer.send(IPC.TPM_INTERACT, interacting),
 }
 
 if (process.contextIsolated) {

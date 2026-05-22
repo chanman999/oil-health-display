@@ -23,6 +23,7 @@ export default defineConfig({
         input: {
           dashboard: resolve('src/renderer/dashboard/index.html'),
           operator:  resolve('src/renderer/operator/index.html'),
+          overlay:   resolve('src/renderer/overlay/index.html'),
         }
       }
     },

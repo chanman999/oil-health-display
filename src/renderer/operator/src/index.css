@@ -13,3 +13,12 @@ body {
   color: #f1f5f9;
   margin: 0;
 }
+
+/* Pulsing green ring on the Scroll Capture button when active */
+@keyframes scroll-capture-ring {
+  0%, 100% { box-shadow: 0 0 0 2px rgb(52 211 153 / 0.8); }
+  50%       { box-shadow: 0 0 0 5px rgb(52 211 153 / 0.2); }
+}
+.scroll-capture-on {
+  animation: scroll-capture-ring 1.5s ease-in-out infinite;
+}

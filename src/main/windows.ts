@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, shell, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 
@@ -7,6 +7,7 @@ const RENDERER_URL = process.env['ELECTRON_RENDERER_URL']
 
 export let dashboardWindow: BrowserWindow | null = null
 export let operatorWindow: BrowserWindow | null = null
+export let overlayWindow: BrowserWindow | null = null
 
 export function createDashboardWindow(): BrowserWindow {
   dashboardWindow = new BrowserWindow({
@@ -68,6 +69,51 @@ export function openOrFocusOperatorWindow(): void {
   } else {
     operatorWindow.loadFile(join(__dirname, '../renderer/operator/index.html'))
   }
+}
+
+/** Create the always-on-top, click-through badge shown while scroll capture is active. */
+export function createOverlayWindow(): void {
+  if (overlayWindow && !overlayWindow.isDestroyed()) return
+
+  const { width } = screen.getPrimaryDisplay().workAreaSize
+
+  overlayWindow = new BrowserWindow({
+    width: 240,
+    height: 40,
+    x: width - 252,
+    y: 12,
+    alwaysOnTop: true,
+    frame: false,
+    transparent: true,
+    skipTaskbar: true,
+    focusable: false,
+    resizable: false,
+    movable: false,
+    roundedCorners: true,
+    webPreferences: {
+      sandbox: true,
+      // No preload — overlay is purely static HTML, needs no IPC
+    },
+  })
+
+  // Fully click-through — the badge must never block mouse input
+  overlayWindow.setIgnoreMouseEvents(true)
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver') // highest level on macOS
+
+  overlayWindow.on('closed', () => { overlayWindow = null })
+
+  if (is.dev && RENDERER_URL) {
+    overlayWindow.loadURL(`${RENDERER_URL}/overlay/index.html`)
+  } else {
+    overlayWindow.loadFile(join(__dirname, '../renderer/overlay/index.html'))
+  }
+}
+
+export function destroyOverlayWindow(): void {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.destroy()
+  }
+  overlayWindow = null
 }
 
 /** Push state to every open window. */

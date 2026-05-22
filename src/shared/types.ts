@@ -9,6 +9,8 @@ export interface OilHealthState {
   statusMode: 'auto' | 'manual';  // auto = derive from TPM
   boardDetected: boolean;   // is an Arduino plugged in via USB?
   connectionOverride: 'auto' | 'force_disconnected';
+  tpmFluctuation: boolean;    // simulated sensor-noise drift — on by default
+  scrollCaptureActive: boolean; // global scroll-wheel → TPM knob; runtime-only (reset on load)
 }
 
 export const DEFAULT_STATE: OilHealthState = {
@@ -20,6 +22,8 @@ export const DEFAULT_STATE: OilHealthState = {
   statusMode: 'auto',
   boardDetected: false,
   connectionOverride: 'auto',
+  tpmFluctuation: true,
+  scrollCaptureActive: false,
 };
 
 export function getEffectiveStatus(state: OilHealthState): OilStatus {

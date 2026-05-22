@@ -22,9 +22,11 @@ function Divider() {
   return <div className="border-t border-slate-700/60 my-5" />
 }
 
-function SliderRow({ label, value, min, max, step, onChange }: {
+function SliderRow({ label, value, min, max, step, onChange, onDragStart, onDragEnd }: {
   label: string; value: number; min: number; max: number; step: number
   onChange: (v: number) => void
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }) {
   return (
     <div className="flex flex-col gap-1.5 mb-4">
@@ -33,12 +35,17 @@ function SliderRow({ label, value, min, max, step, onChange }: {
         <input
           type="number" min={min} max={max} step={step} value={value}
           onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(Math.min(max, Math.max(min, v))) }}
+          onFocus={onDragStart}
+          onBlur={onDragEnd}
           className={`w-20 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-sm text-slate-100 text-right ${FOCUS} focus-visible:ring-offset-slate-800`}
         />
       </div>
       <input
         type="range" min={min} max={max} step={step} value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
+        onPointerDown={onDragStart}
+        onPointerUp={onDragEnd}
+        onBlur={onDragEnd}
         className={`w-full accent-slate-400 cursor-pointer rounded ${FOCUS}`}
       />
     </div>
@@ -48,13 +55,14 @@ function SliderRow({ label, value, min, max, step, onChange }: {
 // ── Main App ───────────────────────────────────────────────────────────────
 export default function App(): JSX.Element {
   const state = useStore()
-
-  // All mutations go through main — never touch local store directly
   const update = window.api.updateState
 
   function applyPreset(p: typeof PRESETS[number]) {
     update({ tpm: p.tpm, temperatureF: p.temperatureF, colorIndex: p.colorIndex, hoursOfUse: p.hoursOfUse, statusMode: 'auto' })
   }
+
+  const startTpmInteract = () => window.api.setTpmInteracting(true)
+  const endTpmInteract   = () => window.api.setTpmInteracting(false)
 
   return (
     <div className="min-h-screen bg-[#13151f] text-slate-100 flex flex-col">
@@ -66,6 +74,45 @@ export default function App(): JSX.Element {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
+
+        {/* ── Global Controls ── */}
+        <SectionHeader title="Global Controls" />
+        <button
+          onClick={() => update({ scrollCaptureActive: !state.scrollCaptureActive })}
+          className={[
+            'w-full py-2.5 rounded-lg border text-sm font-semibold transition-all duration-200',
+            state.scrollCaptureActive
+              ? 'border-emerald-500 bg-emerald-950 text-emerald-400 scroll-capture-on'
+              : `border-slate-600 bg-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-500 ${FOCUS}`,
+          ].join(' ')}
+        >
+          Scroll Capture: {state.scrollCaptureActive ? 'ON' : 'OFF'}
+        </button>
+        <p className="text-slate-500 text-xs mt-2 mb-0">
+          {state.scrollCaptureActive
+            ? 'Mouse wheel adjusts TPM globally — even outside this app. Toggle off with Cmd/Ctrl+J.'
+            : 'Activate to use the mouse wheel as a global TPM knob. Shortcut: Cmd/Ctrl+J.'}
+        </p>
+
+        <Divider />
+
+        {/* ── Live Drift toggle ── */}
+        <label className={`flex items-center gap-3 mb-5 cursor-pointer select-none group`}>
+          <div className="relative">
+            <input
+              type="checkbox"
+              checked={state.tpmFluctuation}
+              onChange={(e) => update({ tpmFluctuation: e.target.checked })}
+              className={`sr-only peer`}
+            />
+            {/* Custom toggle pill */}
+            <div className="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-emerald-600 transition-colors duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-slate-400 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900" />
+            <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4" />
+          </div>
+          <span className="text-sm text-slate-300 group-hover:text-slate-100 transition-colors">
+            Live drift <span className="text-slate-500">(simulates sensor noise)</span>
+          </span>
+        </label>
 
         {/* ── Presets ── */}
         <SectionHeader title="Preset Scenarios" />
@@ -85,7 +132,15 @@ export default function App(): JSX.Element {
 
         {/* ── Manual Controls ── */}
         <SectionHeader title="Manual Controls" />
-        <SliderRow label="TPM"              value={state.tpm}          min={0}   max={40}  step={0.5} onChange={(v) => update({ tpm: v })} />
+        {/* TPM slider pauses fluctuation while being dragged */}
+        <SliderRow
+          label="TPM"
+          value={state.tpm}
+          min={0} max={40} step={0.5}
+          onChange={(v) => update({ tpm: v })}
+          onDragStart={startTpmInteract}
+          onDragEnd={endTpmInteract}
+        />
         <SliderRow label="Temperature (°F)" value={state.temperatureF} min={250} max={400} step={1}   onChange={(v) => update({ temperatureF: v })} />
         <SliderRow label="Color Index"      value={state.colorIndex}   min={1}   max={10}  step={1}   onChange={(v) => update({ colorIndex: v })} />
         <SliderRow label="Hours of Use"     value={state.hoursOfUse}   min={0}   max={48}  step={0.5} onChange={(v) => update({ hoursOfUse: v })} />

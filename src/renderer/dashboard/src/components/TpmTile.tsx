@@ -11,17 +11,27 @@ function barColor(tpm: number) {
 export default function TpmTile() {
   const tpm = useStore((s) => s.tpm)
   const pct = Math.min((tpm / TPM_MAX) * 100, 100)
+  // Always show exactly two decimal places so digits don't jitter width
+  const display = tpm.toFixed(2)
 
   return (
     <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 flex flex-col gap-4">
       <span className="text-slate-400 text-sm font-medium uppercase tracking-widest">Oil Quality (TPM)</span>
       <div className="flex items-end gap-2">
-        <span className="text-white font-bold" style={{ fontSize: '3.5rem', lineHeight: 1 }}>{tpm}</span>
+        <span
+          className="text-white font-bold"
+          style={{ fontSize: '3.5rem', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
+        >
+          {display}
+        </span>
         <span className="text-slate-400 text-2xl font-medium pb-1">%</span>
       </div>
       <div className="space-y-2">
         <div className="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
-          <div className={`h-full rounded-full transition-all duration-500 ${barColor(tpm)}`} style={{ width: `${pct}%` }} />
+          <div
+            className={`h-full rounded-full transition-all duration-300 ${barColor(tpm)}`}
+            style={{ width: `${pct}%` }}
+          />
         </div>
         <div className="flex justify-between text-xs text-slate-500">
           <span className={tpm < 18 ? 'text-emerald-400 font-semibold' : ''}>0–17 Good</span>

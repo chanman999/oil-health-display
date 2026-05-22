@@ -12,8 +12,8 @@ export function initPersistence(): OilHealthState {
   try {
     const raw = readFileSync(filePath, 'utf-8')
     const saved = JSON.parse(raw) as Partial<OilHealthState>
-    // boardDetected is runtime-only — always reset to false on load
-    return { ...DEFAULT_STATE, ...saved, boardDetected: false }
+    // boardDetected and scrollCaptureActive are runtime-only — always reset on load
+    return { ...DEFAULT_STATE, ...saved, boardDetected: false, scrollCaptureActive: false }
   } catch {
     return { ...DEFAULT_STATE }
   }
@@ -23,7 +23,7 @@ export function initPersistence(): OilHealthState {
 export function scheduleWrite(state: OilHealthState): void {
   if (debounceTimer) clearTimeout(debounceTimer)
   debounceTimer = setTimeout(() => {
-    const { boardDetected: _omit, ...toSave } = state
+    const { boardDetected: _b, scrollCaptureActive: _s, ...toSave } = state
     try {
       writeFileSync(filePath, JSON.stringify(toSave, null, 2), 'utf-8')
     } catch (err) {
