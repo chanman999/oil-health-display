@@ -1,10 +1,14 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
+import { OilHealthState } from '../shared/types'
 
 declare global {
   interface Window {
     electron: ElectronAPI
     api: {
-      onBoardDetectionChange: (callback: (detected: boolean) => void) => () => void
+      getState: () => Promise<OilHealthState>
+      updateState: (partial: Partial<OilHealthState>) => void
+      onStateChanged: (callback: (state: OilHealthState) => void) => () => void
+      openOperatorWindow: () => void
     }
   }
 }

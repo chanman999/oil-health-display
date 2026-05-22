@@ -5,13 +5,11 @@
   --font-sans: 'Inter', system-ui, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   font-family: var(--font-sans);
-  background-color: #0f1117;
+  background-color: #13151f;
   color: #f1f5f9;
   margin: 0;
 }

@@ -7,23 +7,23 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      lib: {
-        entry: resolve('src/main/index.ts')
-      }
+      lib: { entry: resolve('src/main/index.ts') }
     }
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      lib: {
-        entry: resolve('src/preload/index.ts')
-      }
+      lib: { entry: resolve('src/preload/index.ts') }
     }
   },
   renderer: {
-    resolve: {
-      alias: {
-        '@renderer': resolve('src/renderer/src')
+    root: resolve('src/renderer'),
+    build: {
+      rollupOptions: {
+        input: {
+          dashboard: resolve('src/renderer/dashboard/index.html'),
+          operator:  resolve('src/renderer/operator/index.html'),
+        }
       }
     },
     plugins: [tailwindcss(), react()]

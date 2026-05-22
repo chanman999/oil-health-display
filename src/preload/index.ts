@@ -1,21 +1,31 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { IPC } from '../shared/ipc'
+import { OilHealthState } from '../shared/types'
 
 const api = {
-  onBoardDetectionChange: (callback: (detected: boolean) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, detected: boolean) => callback(detected)
-    ipcRenderer.on('board-detection-change', handler)
-    // Return an unsubscribe function so the caller can clean up
-    return () => ipcRenderer.removeListener('board-detection-change', handler)
+  getState: (): Promise<OilHealthState> =>
+    ipcRenderer.invoke(IPC.STATE_GET),
+
+  updateState: (partial: Partial<OilHealthState>): void =>
+    ipcRenderer.send(IPC.STATE_UPDATE, partial),
+
+  onStateChanged: (callback: (state: OilHealthState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: OilHealthState) => callback(state)
+    ipcRenderer.on(IPC.STATE_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC.STATE_CHANGED, handler)
   },
+
+  openOperatorWindow: (): void =>
+    ipcRenderer.send(IPC.OPERATOR_OPEN),
 }
 
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
+  } catch (err) {
+    console.error(err)
   }
 } else {
   // @ts-ignore

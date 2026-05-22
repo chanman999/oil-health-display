@@ -1,16 +1,15 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { app, ipcMain, globalShortcut } from 'electron'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { SerialPort } from 'serialport'
+import { stateManager } from './state'
+import { initPersistence, scheduleWrite } from './persistence'
+import { createDashboardWindow, openOrFocusOperatorWindow, broadcastState } from './windows'
+import { IPC } from '../shared/ipc'
+import { OilHealthState } from '../shared/types'
 
-// Vendor IDs that indicate a supported Arduino-compatible board (lowercase for comparison)
-const ARDUINO_VENDOR_IDS = new Set([
-  '2341', // Arduino official
-  '2a03', // Arduino.org / some clones
-  '1a86', // CH340 — Elegoo Uno R3 and common clones
-  '10c4', // CP210x — common on ESP32 boards
-  '0403', // FTDI — some older clones
-])
+// ── Board detection ────────────────────────────────────────────────────────
+
+const ARDUINO_VENDOR_IDS = new Set(['2341', '2a03', '1a86', '10c4', '0403'])
 
 function isArduinoBoard(port: Awaited<ReturnType<typeof SerialPort.list>>[number]): boolean {
   if (port.manufacturer && /arduino/i.test(port.manufacturer)) return true
@@ -20,82 +19,71 @@ function isArduinoBoard(port: Awaited<ReturnType<typeof SerialPort.list>>[number
 
 async function detectBoard(): Promise<boolean> {
   try {
-    const ports = await SerialPort.list()
-    return ports.some(isArduinoBoard)
+    return (await SerialPort.list()).some(isArduinoBoard)
   } catch {
     return false
   }
 }
 
-function startBoardPolling(window: BrowserWindow): ReturnType<typeof setInterval> {
-  let lastState: boolean | null = null
-
+function startBoardPolling(): ReturnType<typeof setInterval> {
+  let lastDetected: boolean | null = null
   async function poll(): Promise<void> {
     const detected = await detectBoard()
-    // Send on first poll and whenever state changes
-    if (detected !== lastState) {
-      lastState = detected
-      if (!window.isDestroyed()) {
-        window.webContents.send('board-detection-change', detected)
-      }
+    if (detected !== lastDetected) {
+      lastDetected = detected
+      stateManager.update({ boardDetected: detected })
     }
   }
-
   poll()
   return setInterval(poll, 2000)
 }
 
-function createWindow(): void {
-  const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    show: false,
-    autoHideMenuBar: true,
-    title: 'Oil Health Monitor',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
-  })
+// ── IPC handlers ───────────────────────────────────────────────────────────
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
-  })
+ipcMain.handle(IPC.STATE_GET, () => stateManager.get())
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
+ipcMain.on(IPC.STATE_UPDATE, (_event, partial: Partial<OilHealthState>) => {
+  stateManager.update(partial)
+})
 
-  const pollingInterval = startBoardPolling(mainWindow)
-  mainWindow.on('closed', () => clearInterval(pollingInterval))
+ipcMain.on(IPC.OPERATOR_OPEN, () => openOrFocusOperatorWindow())
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-}
+// ── App lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.oil-health-monitor')
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+  // Seed state from disk before any window opens
+  const saved = initPersistence()
+  stateManager.load(saved)
+
+  // Broadcast every state change to all open windows + schedule disk write
+  stateManager.on('changed', (state: OilHealthState) => {
+    broadcastState(IPC.STATE_CHANGED, state)
+    scheduleWrite(state)
   })
 
-  createWindow()
+  app.on('browser-window-created', (_, win) => optimizer.watchWindowShortcuts(win))
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  createDashboardWindow()
+  startBoardPolling()
+
+  // Global shortcut works even when the dashboard window isn't focused
+  globalShortcut.register('CommandOrControl+Shift+O', () => {
+    openOrFocusOperatorWindow()
   })
+
+  app.on('activate', () => {
+    // macOS: re-create dashboard if all windows were closed
+    const { dashboardWindow } = require('./windows')
+    if (!dashboardWindow) createDashboardWindow()
+  })
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  if (process.platform !== 'darwin') app.quit()
 })
-
-// ipcMain kept in scope — will be used for future channels
-ipcMain

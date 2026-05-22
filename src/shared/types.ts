@@ -21,3 +21,14 @@ export const DEFAULT_STATE: OilHealthState = {
   boardDetected: false,
   connectionOverride: 'auto',
 };
+
+export function getEffectiveStatus(state: OilHealthState): OilStatus {
+  if (state.statusMode === 'manual') return state.status;
+  if (state.tpm < 18) return 'good';
+  if (state.tpm <= 25) return 'monitor';
+  return 'change_now';
+}
+
+export function getEffectiveConnection(state: OilHealthState): boolean {
+  return state.boardDetected && state.connectionOverride === 'auto';
+}
