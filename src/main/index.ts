@@ -4,7 +4,13 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { SerialPort } from 'serialport'
 
 // Vendor IDs that indicate a supported Arduino-compatible board (lowercase for comparison)
-const ARDUINO_VENDOR_IDS = new Set(['2341', '1a86', '10c4'])
+const ARDUINO_VENDOR_IDS = new Set([
+  '2341', // Arduino official
+  '2a03', // Arduino.org / some clones
+  '1a86', // CH340 — Elegoo Uno R3 and common clones
+  '10c4', // CP210x — common on ESP32 boards
+  '0403', // FTDI — some older clones
+])
 
 function isArduinoBoard(port: Awaited<ReturnType<typeof SerialPort.list>>[number]): boolean {
   if (port.manufacturer && /arduino/i.test(port.manufacturer)) return true

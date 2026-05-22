@@ -39,7 +39,16 @@ export default function App(): JSX.Element {
         <HoursTile />
       </main>
 
-      {/* Operator panel — triggered by Cmd/Ctrl+Shift+O */}
+      {/* Operator panel trigger */}
+      <footer className="flex justify-center">
+        <button
+          onClick={() => setOpen(true)}
+          className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-500 text-xs font-medium hover:bg-slate-700 hover:text-slate-300 hover:border-slate-500 transition-colors"
+        >
+          Operator Controls
+        </button>
+      </footer>
+
       <OperatorPanel open={open} onClose={() => setOpen(false)} />
     </div>
   )
