@@ -1,6 +1,43 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { SerialPort } from 'serialport'
+
+// Vendor IDs that indicate a supported Arduino-compatible board (lowercase for comparison)
+const ARDUINO_VENDOR_IDS = new Set(['2341', '1a86', '10c4'])
+
+function isArduinoBoard(port: Awaited<ReturnType<typeof SerialPort.list>>[number]): boolean {
+  if (port.manufacturer && /arduino/i.test(port.manufacturer)) return true
+  if (port.vendorId && ARDUINO_VENDOR_IDS.has(port.vendorId.toLowerCase())) return true
+  return false
+}
+
+async function detectBoard(): Promise<boolean> {
+  try {
+    const ports = await SerialPort.list()
+    return ports.some(isArduinoBoard)
+  } catch {
+    return false
+  }
+}
+
+function startBoardPolling(window: BrowserWindow): ReturnType<typeof setInterval> {
+  let lastState: boolean | null = null
+
+  async function poll(): Promise<void> {
+    const detected = await detectBoard()
+    // Send on first poll and whenever state changes
+    if (detected !== lastState) {
+      lastState = detected
+      if (!window.isDestroyed()) {
+        window.webContents.send('board-detection-change', detected)
+      }
+    }
+  }
+
+  poll()
+  return setInterval(poll, 2000)
+}
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -23,6 +60,9 @@ function createWindow(): void {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
+
+  const pollingInterval = startBoardPolling(mainWindow)
+  mainWindow.on('closed', () => clearInterval(pollingInterval))
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -50,3 +90,6 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+// ipcMain kept in scope — will be used for future channels
+ipcMain
