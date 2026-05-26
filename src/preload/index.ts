@@ -21,6 +21,12 @@ const api = {
 
   setTpmInteracting: (interacting: boolean): void =>
     ipcRenderer.send(IPC.TPM_INTERACT, interacting),
+
+  onConnectionDetected: (callback: () => void): (() => void) => {
+    const handler = () => callback()
+    ipcRenderer.on(IPC.CONNECTION_DETECTED, handler)
+    return () => ipcRenderer.removeListener(IPC.CONNECTION_DETECTED, handler)
+  },
 }
 
 if (process.contextIsolated) {

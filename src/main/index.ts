@@ -5,7 +5,7 @@ import { join } from 'path'
 import { SerialPort } from 'serialport'
 import { stateManager } from './state'
 import { initPersistence, scheduleWrite } from './persistence'
-import { createDashboardWindow, openOrFocusOperatorWindow, broadcastState, createOverlayWindow, destroyOverlayWindow } from './windows'
+import { dashboardWindow, createDashboardWindow, openOrFocusOperatorWindow, broadcastState, createOverlayWindow, destroyOverlayWindow } from './windows'
 import { startFluctuationTimer } from './fluctuation'
 import { startScrollCapture, stopScrollCapture } from './scrollCapture'
 import { IPC } from '../shared/ipc'
@@ -29,13 +29,44 @@ async function detectBoard(): Promise<boolean> {
   }
 }
 
+// Celebratory popup: only fire on false→true transition with 800ms stability
+// debounce, and a 60s cooldown to suppress reconnect spam.
+const BOARD_DEBOUNCE_MS = 800
+const BOARD_COOLDOWN_MS = 60_000
+
 function startBoardPolling(): ReturnType<typeof setInterval> {
   let lastDetected: boolean | null = null
+  let stableTimer: ReturnType<typeof setTimeout> | null = null
+  let cooldownUntil = 0
+
+  function maybeSendConnectionDetected(): void {
+    const now = Date.now()
+    if (now < cooldownUntil) return
+    cooldownUntil = now + BOARD_COOLDOWN_MS
+    dashboardWindow?.webContents.send(IPC.CONNECTION_DETECTED)
+  }
+
   async function poll(): Promise<void> {
     const detected = await detectBoard()
     if (detected !== lastDetected) {
       lastDetected = detected
       stateManager.update({ boardDetected: detected })
+
+      // Cancel any pending stability timer on every transition
+      if (stableTimer !== null) {
+        clearTimeout(stableTimer)
+        stableTimer = null
+      }
+
+      if (detected) {
+        // Start stability window — only fire popup if still true after 800ms
+        stableTimer = setTimeout(() => {
+          stableTimer = null
+          if (stateManager.get().boardDetected) {
+            maybeSendConnectionDetected()
+          }
+        }, BOARD_DEBOUNCE_MS)
+      }
     }
   }
   poll()

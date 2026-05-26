@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Settings } from 'lucide-react'
 import StatusTile from './components/StatusTile'
 import TpmTile from './components/TpmTile'
@@ -6,8 +7,15 @@ import ColorTile from './components/ColorTile'
 import HoursTile from './components/HoursTile'
 import ConnectionBadge from './components/ConnectionBadge'
 import Clock from './components/Clock'
+import ConnectionPopup from './components/ConnectionPopup'
 
 export default function App(): JSX.Element {
+  const [showPopup, setShowPopup] = useState(false)
+
+  useEffect(() => {
+    return window.api.onConnectionDetected(() => setShowPopup(true))
+  }, [])
+
   return (
     <div className="min-h-screen bg-[#0f1117] text-slate-100 p-6 flex flex-col gap-6">
       {/* Header */}
@@ -39,6 +47,8 @@ export default function App(): JSX.Element {
           Operator Controls
         </button>
       </footer>
+
+      {showPopup && <ConnectionPopup onDismiss={() => setShowPopup(false)} />}
     </div>
   )
 }

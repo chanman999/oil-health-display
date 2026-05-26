@@ -10,6 +10,7 @@ declare global {
       onStateChanged: (callback: (state: OilHealthState) => void) => () => void
       openOperatorWindow: () => void
       setTpmInteracting: (interacting: boolean) => void
+      onConnectionDetected: (callback: () => void) => () => void
     }
   }
 }
