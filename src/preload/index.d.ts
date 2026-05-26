@@ -1,5 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import { OilHealthState } from '../shared/types'
+import { OilHealthState, ScriptName, ScriptStatus } from '../shared/types'
 
 declare global {
   interface Window {
@@ -11,6 +11,10 @@ declare global {
       openOperatorWindow: () => void
       setTpmInteracting: (interacting: boolean) => void
       onConnectionDetected: (callback: () => void) => () => void
+      runScript: (name: ScriptName) => void
+      cancelScript: () => void
+      getScriptStatus: () => Promise<ScriptStatus | null>
+      onScriptStatus: (callback: (status: ScriptStatus | null) => void) => () => void
     }
   }
 }

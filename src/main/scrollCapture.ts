@@ -20,10 +20,16 @@ let isRunning = false
 let lastAcceptedAt = 0
 let interactTimer: ReturnType<typeof setTimeout> | null = null
 
+/** Called (at most once per throttle window) when a wheel event fires.
+ *  Used by index.ts to cancel any running script on first scroll. */
+export let onScrollFired: (() => void) | null = null
+
 function handleWheel(event: UiohookWheelEvent): void {
   const now = Date.now()
   if (now - lastAcceptedAt < THROTTLE_MS) return
   lastAcceptedAt = now
+
+  onScrollFired?.()
 
   // uiohook convention: rotation < 0 = scroll up; rotation > 0 = scroll down.
   // We map scroll up → more degradation (TPM increases).

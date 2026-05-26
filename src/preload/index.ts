@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { IPC } from '../shared/ipc'
-import { OilHealthState } from '../shared/types'
+import { OilHealthState, ScriptName, ScriptStatus } from '../shared/types'
 
 const api = {
   getState: (): Promise<OilHealthState> =>
@@ -26,6 +26,21 @@ const api = {
     const handler = () => callback()
     ipcRenderer.on(IPC.CONNECTION_DETECTED, handler)
     return () => ipcRenderer.removeListener(IPC.CONNECTION_DETECTED, handler)
+  },
+
+  runScript: (name: ScriptName): void =>
+    ipcRenderer.send(IPC.SCRIPT_RUN, name),
+
+  cancelScript: (): void =>
+    ipcRenderer.send(IPC.SCRIPT_CANCEL),
+
+  getScriptStatus: (): Promise<ScriptStatus | null> =>
+    ipcRenderer.invoke(IPC.SCRIPT_STATUS_GET),
+
+  onScriptStatus: (callback: (status: ScriptStatus | null) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: ScriptStatus | null) => callback(status)
+    ipcRenderer.on(IPC.SCRIPT_STATUS, handler)
+    return () => ipcRenderer.removeListener(IPC.SCRIPT_STATUS, handler)
   },
 }
 

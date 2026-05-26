@@ -5,11 +5,12 @@ import { join } from 'path'
 import { SerialPort } from 'serialport'
 import { stateManager } from './state'
 import { initPersistence, scheduleWrite } from './persistence'
-import { dashboardWindow, createDashboardWindow, openOrFocusOperatorWindow, broadcastState, createOverlayWindow, destroyOverlayWindow } from './windows'
+import { dashboardWindow, operatorWindow, createDashboardWindow, openOrFocusOperatorWindow, broadcastState, createOverlayWindow, destroyOverlayWindow } from './windows'
 import { startFluctuationTimer } from './fluctuation'
-import { startScrollCapture, stopScrollCapture } from './scrollCapture'
+import * as scrollCapture from './scrollCapture'
+import { scriptRunner } from './scripts'
 import { IPC } from '../shared/ipc'
-import { OilHealthState } from '../shared/types'
+import { OilHealthState, ScriptName, ScriptStatus } from '../shared/types'
 
 // ── Board detection ────────────────────────────────────────────────────────
 
@@ -121,10 +122,10 @@ function syncScrollCapture(active: boolean): void {
 
   if (active) {
     maybeShowAccessibilityDialog() // non-blocking; shows once per machine
-    startScrollCapture()
+    scrollCapture.startScrollCapture()
     createOverlayWindow()
   } else {
-    stopScrollCapture()
+    scrollCapture.stopScrollCapture()
     destroyOverlayWindow()
   }
 }
@@ -146,6 +147,18 @@ ipcMain.on(IPC.TPM_INTERACT, (_event, interacting: boolean) => {
 
 ipcMain.on(IPC.OPERATOR_OPEN, () => openOrFocusOperatorWindow())
 
+ipcMain.on(IPC.SCRIPT_RUN, (_event, name: ScriptName) => {
+  if (scriptRunner.getStatus()?.name === name) {
+    scriptRunner.cancel()
+  } else {
+    scriptRunner.start(name)
+  }
+})
+
+ipcMain.on(IPC.SCRIPT_CANCEL, () => scriptRunner.cancel())
+
+ipcMain.handle(IPC.SCRIPT_STATUS_GET, () => scriptRunner.getStatus())
+
 // ── App lifecycle ──────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
@@ -158,6 +171,18 @@ app.whenReady().then(() => {
     broadcastState(IPC.STATE_CHANGED, state)
     scheduleWrite(state)
     syncScrollCapture(state.scrollCaptureActive)
+  })
+
+  // Broadcast script status updates to the operator window only
+  scriptRunner.on('status', (status: ScriptStatus | null) => {
+    operatorWindow?.webContents.send(IPC.SCRIPT_STATUS, status)
+
+    // When a script starts, register a one-shot scroll cancel; clear when done
+    if (status !== null) {
+      scrollCapture.onScrollFired = () => scriptRunner.cancel()
+    } else {
+      scrollCapture.onScrollFired = null
+    }
   })
 
   app.on('browser-window-created', (_, win) => optimizer.watchWindowShortcuts(win))
@@ -177,6 +202,24 @@ app.whenReady().then(() => {
     stateManager.update({ scrollCaptureActive: !current })
   })
 
+  // Cmd/Ctrl+P — toggle Make Pure script
+  globalShortcut.register('CommandOrControl+P', () => {
+    if (scriptRunner.getStatus()?.name === 'make_pure') {
+      scriptRunner.cancel()
+    } else {
+      scriptRunner.start('make_pure')
+    }
+  })
+
+  // Cmd/Ctrl+D — toggle Make Dirty script
+  globalShortcut.register('CommandOrControl+D', () => {
+    if (scriptRunner.getStatus()?.name === 'make_dirty') {
+      scriptRunner.cancel()
+    } else {
+      scriptRunner.start('make_dirty')
+    }
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createDashboardWindow()
   })
@@ -186,7 +229,7 @@ app.on('before-quit', () => {
   // Must stop uiohook before the process exits — otherwise it leaks as a
   // background thread and can prevent clean shutdown.
   if (stateManager.get().scrollCaptureActive) {
-    stopScrollCapture()
+    scrollCapture.stopScrollCapture()
     destroyOverlayWindow()
   }
 })

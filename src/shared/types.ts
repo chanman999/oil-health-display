@@ -1,5 +1,15 @@
 export type OilStatus = 'good' | 'monitor' | 'change_now';
 
+export type ScriptName  = 'make_pure' | 'make_dirty'
+export type ScriptPhase = 'delay' | 'transitioning' | 'settled'
+
+export interface ScriptStatus {
+  name:    ScriptName
+  phase:   ScriptPhase
+  elapsed: number  // ms since script start
+  total:   number  // total script duration in ms
+}
+
 export interface OilHealthState {
   tpm: number;              // Total Polar Materials, 0–40 (%)
   temperatureF: number;     // 250–400 °F

@@ -1,17 +1,9 @@
+import { useEffect, useState } from 'react'
 import { useStore } from './store'
-import { OilStatus, DEFAULT_STATE } from '../../../shared/types'
+import { OilStatus, DEFAULT_STATE, ScriptStatus } from '../../../shared/types'
 
 // ── Focus ring shared style ────────────────────────────────────────────────
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900'
-
-// ── Presets ────────────────────────────────────────────────────────────────
-const PRESETS = [
-  { label: 'Fresh Oil',     tpm: 4,  temperatureF: 350, colorIndex: 1,  hoursOfUse: 0  },
-  { label: 'Mid-Shift',     tpm: 14, temperatureF: 355, colorIndex: 4,  hoursOfUse: 6  },
-  { label: 'Getting Tired', tpm: 20, temperatureF: 360, colorIndex: 6,  hoursOfUse: 12 },
-  { label: 'End of Day',    tpm: 26, temperatureF: 365, colorIndex: 8,  hoursOfUse: 16 },
-  { label: 'Critical',      tpm: 32, temperatureF: 370, colorIndex: 10, hoursOfUse: 22 },
-]
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 function SectionHeader({ title }: { title: string }) {
@@ -52,17 +44,67 @@ function SliderRow({ label, value, min, max, step, onChange, onDragStart, onDrag
   )
 }
 
-// ── Main App ───────────────────────────────────────────────────────────────
-export default function App(): JSX.Element {
-  const state = useStore()
-  const update = window.api.updateState
-
-  function applyPreset(p: typeof PRESETS[number]) {
-    update({ tpm: p.tpm, temperatureF: p.temperatureF, colorIndex: p.colorIndex, hoursOfUse: p.hoursOfUse, statusMode: 'auto' })
+// ── Script status strip ────────────────────────────────────────────────────
+function ScriptStrip({ status, onCancel }: { status: ScriptStatus; onCancel: () => void }) {
+  const pct = Math.min(100, (status.elapsed / status.total) * 100)
+  const elapsedS = (status.elapsed / 1000).toFixed(1)
+  const totalS   = (status.total   / 1000).toFixed(0)
+  const name     = status.name === 'make_pure' ? 'Make Pure' : 'Make Dirty'
+  const phaseLabel: Record<string, string> = {
+    delay: 'armed', transitioning: 'transitioning', settled: 'settled',
   }
 
-  const startTpmInteract = () => window.api.setTpmInteracting(true)
+  return (
+    <div className="relative overflow-hidden border-b border-slate-700/60 bg-slate-800/80">
+      {/* Progress fill */}
+      <div
+        className="absolute inset-y-0 left-0 bg-slate-700/50 transition-[width] duration-100"
+        style={{ width: `${pct}%` }}
+      />
+      <div className="relative flex items-center justify-between px-4 py-2 gap-3">
+        <span className="text-xs text-slate-300 font-medium truncate">
+          Running: <span className="text-slate-100">{name}</span>
+          <span className="text-slate-500"> — </span>
+          {phaseLabel[status.phase]}
+          <span className="text-slate-500"> — </span>
+          {elapsedS}s / {totalS}s
+        </span>
+        <button
+          onClick={onCancel}
+          className={`shrink-0 px-2 py-0.5 rounded border border-slate-600 bg-slate-700 text-slate-300 text-xs hover:bg-slate-600 hover:text-slate-100 transition-colors ${FOCUS}`}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main App ───────────────────────────────────────────────────────────────
+export default function App(): JSX.Element {
+  const state  = useStore()
+  const update = window.api.updateState
+
+  const [scriptStatus, setScriptStatus] = useState<ScriptStatus | null>(null)
+
+  useEffect(() => {
+    window.api.getScriptStatus().then(setScriptStatus)
+    return window.api.onScriptStatus(setScriptStatus)
+  }, [])
+
+  const cancelScript = () => window.api.cancelScript()
+
+  function runScript(name: 'make_pure' | 'make_dirty') {
+    if (scriptStatus?.name === name) {
+      window.api.cancelScript()
+    } else {
+      window.api.runScript(name)
+    }
+  }
+
+  const startTpmInteract = () => { cancelScript(); window.api.setTpmInteracting(true) }
   const endTpmInteract   = () => window.api.setTpmInteracting(false)
+  const cancelOnDrag     = () => cancelScript()
 
   return (
     <div className="min-h-screen bg-[#13151f] text-slate-100 flex flex-col">
@@ -71,6 +113,11 @@ export default function App(): JSX.Element {
         <h1 className="text-slate-100 font-semibold text-base">Operator Controls</h1>
         <p className="text-slate-500 text-xs mt-0.5">Changes update the dashboard in real time</p>
       </div>
+
+      {/* Script status strip — only visible while a script is running */}
+      {scriptStatus && (
+        <ScriptStrip status={scriptStatus} onCancel={cancelScript} />
+      )}
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -105,7 +152,6 @@ export default function App(): JSX.Element {
               onChange={(e) => update({ tpmFluctuation: e.target.checked })}
               className={`sr-only peer`}
             />
-            {/* Custom toggle pill */}
             <div className="w-9 h-5 bg-slate-700 rounded-full peer-checked:bg-emerald-600 transition-colors duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-slate-400 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-slate-900" />
             <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 peer-checked:translate-x-4" />
           </div>
@@ -114,25 +160,59 @@ export default function App(): JSX.Element {
           </span>
         </label>
 
-        {/* ── Presets ── */}
-        <SectionHeader title="Preset Scenarios" />
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => (
-            <button
-              key={p.label}
-              onClick={() => applyPreset(p)}
-              className={`px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 text-xs font-medium hover:bg-slate-700 hover:border-slate-500 hover:text-slate-100 transition-colors ${FOCUS}`}
-            >
-              {p.label}
-            </button>
-          ))}
+        {/* ── Script Triggers ── */}
+        <SectionHeader title="Script Triggers" />
+        <div className="flex gap-2 mb-1">
+          <button
+            onClick={() => runScript('make_pure')}
+            className={[
+              'flex-1 py-2 px-3 rounded-lg border text-xs font-medium transition-colors',
+              scriptStatus?.name === 'make_pure'
+                ? 'border-sky-600 bg-sky-950 text-sky-300'
+                : `border-slate-600 bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-slate-200 hover:border-slate-500 ${FOCUS}`,
+            ].join(' ')}
+          >
+            🚰 Make Pure (Cmd+P)
+          </button>
+          <button
+            onClick={() => runScript('make_dirty')}
+            className={[
+              'flex-1 py-2 px-3 rounded-lg border text-xs font-medium transition-colors',
+              scriptStatus?.name === 'make_dirty'
+                ? 'border-amber-600 bg-amber-950 text-amber-300'
+                : `border-slate-600 bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-slate-200 hover:border-slate-500 ${FOCUS}`,
+            ].join(' ')}
+          >
+            🍳 Make Dirty (Cmd+D)
+          </button>
+        </div>
+        <p className="text-slate-600 text-xs mb-0">
+          ~6s scripts: 2s delay → 3s smooth transition → 1s settle. Click again to cancel.
+        </p>
+
+        <Divider />
+
+        {/* ── Quick Reset ── */}
+        <SectionHeader title="Quick Reset" />
+        <div className="flex gap-2">
+          <button
+            onClick={() => { cancelScript(); update({ tpm: 4, colorIndex: 1, statusMode: 'auto' }); window.api.setTpmInteracting(false) }}
+            className={`flex-1 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 text-xs font-medium hover:bg-slate-700 hover:border-slate-500 hover:text-slate-100 transition-colors ${FOCUS}`}
+          >
+            Fresh Oil
+          </button>
+          <button
+            onClick={() => { cancelScript(); update({ tpm: 28, colorIndex: 8, statusMode: 'auto' }); window.api.setTpmInteracting(false) }}
+            className={`flex-1 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 text-xs font-medium hover:bg-slate-700 hover:border-slate-500 hover:text-slate-100 transition-colors ${FOCUS}`}
+          >
+            Used Oil
+          </button>
         </div>
 
         <Divider />
 
         {/* ── Manual Controls ── */}
         <SectionHeader title="Manual Controls" />
-        {/* TPM slider pauses fluctuation while being dragged */}
         <SliderRow
           label="TPM"
           value={state.tpm}
@@ -141,9 +221,9 @@ export default function App(): JSX.Element {
           onDragStart={startTpmInteract}
           onDragEnd={endTpmInteract}
         />
-        <SliderRow label="Temperature (°F)" value={state.temperatureF} min={250} max={400} step={1}   onChange={(v) => update({ temperatureF: v })} />
-        <SliderRow label="Color Index"      value={state.colorIndex}   min={1}   max={10}  step={1}   onChange={(v) => update({ colorIndex: v })} />
-        <SliderRow label="Hours of Use"     value={state.hoursOfUse}   min={0}   max={48}  step={0.5} onChange={(v) => update({ hoursOfUse: v })} />
+        <SliderRow label="Temperature (°F)" value={state.temperatureF} min={250} max={400} step={1}   onChange={(v) => update({ temperatureF: v })} onDragStart={cancelOnDrag} />
+        <SliderRow label="Color Index"      value={state.colorIndex}   min={1}   max={10}  step={1}   onChange={(v) => update({ colorIndex: v })}   onDragStart={cancelOnDrag} />
+        <SliderRow label="Hours of Use"     value={state.hoursOfUse}   min={0}   max={48}  step={0.5} onChange={(v) => update({ hoursOfUse: v })}   onDragStart={cancelOnDrag} />
 
         <Divider />
 
@@ -200,7 +280,7 @@ export default function App(): JSX.Element {
         {/* ── Reset ── */}
         <SectionHeader title="Reset" />
         <button
-          onClick={() => update({ ...DEFAULT_STATE })}
+          onClick={() => { cancelScript(); update({ ...DEFAULT_STATE }) }}
           className={`w-full py-2.5 rounded-lg border border-slate-600 bg-slate-800 text-slate-300 text-sm font-medium hover:bg-slate-700 hover:text-slate-100 hover:border-slate-500 transition-colors ${FOCUS}`}
         >
           Reset to Defaults

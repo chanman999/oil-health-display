@@ -6,4 +6,8 @@ export const IPC = {
   OPERATOR_OPEN: 'operator:open',  // renderer → main (send), open/focus operator window
   TPM_INTERACT:         'tpm:interact',        // renderer → main (send), payload: boolean — drag start/end
   CONNECTION_DETECTED:  'connection:detected',  // main → dashboard only (send), no payload
+  SCRIPT_RUN:        'script:run',         // renderer → main (send), payload: ScriptName
+  SCRIPT_CANCEL:     'script:cancel',      // renderer → main (send)
+  SCRIPT_STATUS:     'script:status',      // main → operator only (send), payload: ScriptStatus | null
+  SCRIPT_STATUS_GET: 'script:status:get',  // renderer → main (invoke), returns ScriptStatus | null
 } as const
